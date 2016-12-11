@@ -207,6 +207,8 @@ protected:
 
    void _updatePhysics();
 
+   void _updateTextureIndex();
+
    void _renderBlock( SceneRenderState *state );
    void _renderDebug( ObjectRenderInst *ri, SceneRenderState *state, BaseMatInstance *overrideMat );
 

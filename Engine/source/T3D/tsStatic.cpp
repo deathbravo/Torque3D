@@ -49,6 +49,8 @@
 #include "materials/materialFeatureTypes.h"
 #include "console/engineAPI.h"
 #include "T3D/accumulationVolume.h"
+// andrewmac: Cloth Addon
+#include "T3D/physics/physicsCloth.h"
 
 using namespace Torque;
 
@@ -120,10 +122,18 @@ TSStatic::TSStatic()
    mAlphaFadeEnd     = 150.0f;
    mInvertAlphaFade  = false;
    mAlphaFade = 1.0f;
-   mPhysicsRep = NULL;
+  
 
    mCollisionType = CollisionMesh;
    mDecalType = CollisionMesh;
+
+   // andrewmac : Cloth Options
+   mCloth = NULL;
+   mClothEnabled = false;
+
+   // andrewmac : Physics Options
+   mEnablePhysicsRep = true;
+   mPhysicsRep = NULL;
 }
 
 TSStatic::~TSStatic()
@@ -212,6 +222,16 @@ void TSStatic::initPersistFields()
       addField( "alphaFadeEnd",      TypeF32,    Offset(mAlphaFadeEnd,    TSStatic), "Distance of end Alpha Fade" );  
       addField( "alphaFadeInverse", TypeBool,    Offset(mInvertAlphaFade, TSStatic), "Invert Alpha Fade's Start & End Distance" );  
    endGroup( "AlphaFade" );
+
+   addGroup("Cloth");
+      addField( "clothEnabled",      TypeBool,         Offset( mClothEnabled, TSStatic ), 
+         "@brief Uses available physics engine to simulate cloth pieces.\n");
+   endGroup("Cloth");
+
+   addGroup("Physics");
+      addField( "enablePhysicsRep",  TypeBool,         Offset( mEnablePhysicsRep, TSStatic ), 
+         "@brief Creates a representation of the object in the physics plugin.\n");
+   endGroup("Physics");
 
    addGroup("Debug");
 
@@ -383,6 +403,9 @@ bool TSStatic::_createShape()
       Sim::findObject( cubeDescId, reflectorDesc );
    }
 
+    if ( mClothEnabled )
+        _enableCloth();
+
    return true;
 }
 
@@ -410,6 +433,9 @@ void TSStatic::_updatePhysics()
 {
    SAFE_DELETE( mPhysicsRep );
 
+   // andrewmac: Physics Options.
+   if ( !mEnablePhysicsRep ) return;
+
    if ( !PHYSICSMGR || mCollisionType == None )
       return;
 
@@ -435,7 +461,10 @@ void TSStatic::_updatePhysics()
 
 void TSStatic::onRemove()
 {
-   SAFE_DELETE( mPhysicsRep );
+    SAFE_DELETE( mPhysicsRep );
+    // andrewmac : Cloth
+   	if ( mClothEnabled )
+        _disableCloth();
 
    // Accumulation
    if ( isClientObject() && mShapeInstance )
@@ -520,8 +549,12 @@ void TSStatic::reSkin()
 
 void TSStatic::processTick( const Move *move )
 {
-   if ( isServerObject() && mPlayAmbient && mAmbientThread )
-      mShapeInstance->advanceTime( TickSec, mAmbientThread );
+    // andrewmac : Cloth
+   	if ( mClothEnabled && mCloth )
+        mCloth->processTick();
+
+    if ( isServerObject() && mPlayAmbient && mAmbientThread )
+       mShapeInstance->advanceTime( TickSec, mAmbientThread );
 
    if ( isMounted() )
    {
@@ -554,6 +587,9 @@ void TSStatic::_updateShouldTick()
 
    if ( isTicking() != shouldTick )
       setProcessTick( shouldTick );
+    // andrewmac: Cloth Add-on
+    if ( mClothEnabled )
+        setProcessTick(true);
 }
 
 void TSStatic::prepRenderImage( SceneRenderState* state )
@@ -794,6 +830,13 @@ U32 TSStatic::packUpdate(NetConnection *con, U32 mask, BitStream *stream)
    {
       stream->writeRangedU32( reflectorDesc->getId(), DataBlockObjectIdFirst,  DataBlockObjectIdLast );
    }
+
+   // andrewmac: Cloth
+   stream->writeFlag( mClothEnabled );
+
+   // andrewmac: Physics Options
+   stream->writeFlag( mEnablePhysicsRep );
+
    return retMask;
 }
 
@@ -881,6 +924,24 @@ void TSStatic::unpackUpdate(NetConnection *con, BitStream *stream)
       cubeDescId = stream->readRangedU32( DataBlockObjectIdFirst, DataBlockObjectIdLast );
    }
 
+   // andrewmac: Cloth
+   bool clothFlag = stream->readFlag();
+   if ( clothFlag != mClothEnabled )
+   {
+       if ( clothFlag )
+           _enableCloth();
+       else
+           _disableCloth();
+   }
+
+   // andrewmac: Physics Options
+   bool physicsRepFlag = stream->readFlag();
+   if ( physicsRepFlag != mEnablePhysicsRep )
+   {
+        mEnablePhysicsRep = physicsRepFlag;
+        _updatePhysics();
+   }
+   
    if ( isProperlyAdded() )
       _updateShouldTick();
 }
@@ -1324,4 +1385,22 @@ DefineEngineMethod( TSStatic, getModelFile, const char *, (),,
    )
 {
 	return object->getShapeFileName();
+}
+
+// andrewmac: cloth
+void TSStatic::_enableCloth()
+{
+    _disableCloth();
+    mClothEnabled = true;
+    mCloth = PHYSICSMGR->createCloth(mShapeInstance, getTransform());
+}
+
+void TSStatic::_disableCloth()
+{
+    mClothEnabled = false;
+    if ( mCloth )
+    {
+        mCloth->release();
+        SAFE_DELETE(mCloth);
+    }
 }

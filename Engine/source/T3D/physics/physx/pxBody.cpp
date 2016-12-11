@@ -374,6 +374,21 @@ void PxBody::setTransform( const MatrixF &transform )
    }
 }
 
+void PxBody::moveKinematicTo( const MatrixF &transform )
+{
+   AssertFatal( mActor, "BtBody::moveKinematicTo - The actor is null!" );
+   const bool isKinematic = mBodyFlags & BF_KINEMATIC;
+   if (!isKinematic )
+   {
+      Con::errorf("PxBody::moveKinematicTo is only for kinematic bodies.");
+      return;
+   }
+
+   NxMat34 xfm;
+   xfm.setRowMajor44( transform );
+   mActor->moveGlobalPose( xfm );
+}
+
 void PxBody::applyCorrection( const MatrixF &transform )
 {
    AssertFatal( mActor, "PxBody::applyCorrection - The actor is null!" );

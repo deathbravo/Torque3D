@@ -27,10 +27,21 @@
 #include "T3D/shapeBase.h"
 #endif
 
+class PhysicsBody;
 //----------------------------------------------------------------------------
 
-struct StaticShapeData: public ShapeBaseData {
+struct StaticShapeData: public ShapeBaseData
+{
    typedef ShapeBaseData Parent;
+
+   /// The different types of mesh data types
+   enum MeshType
+   {
+      None = 0,            ///< No mesh
+      Bounds = 1,          ///< Bounding box of the shape
+      CollisionMesh = 2,   ///< Specifically designated collision meshes
+      VisibleMesh = 3      ///< Rendered mesh polygons
+   };
 
   public:
    StaticShapeData();
@@ -38,6 +49,10 @@ struct StaticShapeData: public ShapeBaseData {
    bool  noIndividualDamage;
    S32   dynamicTypeField;
    bool  isShielded;
+   F32   energyPerDamagePoint;
+   bool  enablePhysicsRep;
+   bool  kinematic;
+   MeshType collisionType;
 
    //
    DECLARE_CONOBJECT(StaticShapeData);
@@ -46,7 +61,8 @@ struct StaticShapeData: public ShapeBaseData {
    virtual void unpackData(BitStream* stream);
 };
 
-
+typedef StaticShapeData::MeshType SSDMeshType;
+DefineEnumType( SSDMeshType );
 //----------------------------------------------------------------------------
 
 class StaticShape: public ShapeBase
@@ -55,8 +71,11 @@ class StaticShape: public ShapeBase
 
    StaticShapeData*  mDataBlock;
    bool              mPowered;
+   PhysicsBody       *mPhysicsRep;
 
    void onUnmount(ShapeBase* obj,S32 node);
+
+   void _createPhysics();
 
 protected:
    enum MaskBits {
@@ -75,6 +94,7 @@ public:
    bool onNewDataBlock(GameBaseData *dptr, bool reload);
 
    void processTick(const Move *move);
+   //void interpolateTick(F32 delta);
    void setTransform(const MatrixF &mat);
 
    U32  packUpdate  (NetConnection *conn, U32 mask, BitStream *stream);

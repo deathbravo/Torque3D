@@ -56,6 +56,9 @@ protected:
    /// the mass center on a dynamic.
    btCompoundShape *mCompound;
 
+   /// The body flags set at creation time.
+   U32 mBodyFlags;
+
    ///
    F32 mMass;
 

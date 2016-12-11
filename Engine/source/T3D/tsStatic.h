@@ -47,6 +47,7 @@ class TSShapeInstance;
 class TSThread;
 class TSStatic;
 class PhysicsBody;
+class PhysicsCloth;
 struct ObjectRenderInst;
 
 
@@ -172,6 +173,13 @@ protected:
 
    bool              mPlayAmbient;
    TSThread*         mAmbientThread;
+
+   // andrewmac: PhysX3 Cloth Add-on
+   bool              mEnablePhysicsRep;
+   bool              mClothEnabled;
+   PhysicsCloth*     mCloth;
+   void              _enableCloth();
+   void              _disableCloth();
 
    /// The type of mesh data to return for collision queries.
    MeshType mCollisionType;

@@ -36,6 +36,7 @@ BtBody::BtBody() :
    mWorld( NULL ),
    mMass( 0.0f ),
    mCompound( NULL ),
+   mBodyFlags( 0 ),
    mCenterOfMass( NULL ),
    mInvCenterOfMass( NULL ),
    mIsDynamic( false ),
@@ -50,6 +51,7 @@ BtBody::~BtBody()
 
 void BtBody::_releaseActor()
 {
+   mBodyFlags = 0;
    if ( mActor )
    {
       mWorld->getDynamicsWorld()->removeRigidBody( mActor );
@@ -79,7 +81,7 @@ bool BtBody::init(   PhysicsCollision *shape,
 	 
    // Cleanup any previous actor.
    _releaseActor();
-
+   mBodyFlags = bodyFlags;
    mWorld = (BtWorld*)world;
 
    mColShape = (BtCollision*)shape;
@@ -142,6 +144,7 @@ bool BtBody::init(   PhysicsCollision *shape,
    {
       btFlags &= ~btCollisionObject::CF_STATIC_OBJECT;
       btFlags |= btCollisionObject::CF_KINEMATIC_OBJECT;
+      mActor->setActivationState(DISABLE_DEACTIVATION);
    }
 
    mActor->setCollisionFlags( btFlags );
@@ -255,6 +258,9 @@ void BtBody::setSleeping( bool sleeping )
 {
    AssertFatal( mActor, "BtBody::setSleeping - The actor is null!" );
    AssertFatal( isDynamic(), "BtBody::setSleeping - This call is only for dynamics!" );
+
+   if( mBodyFlags & BF_KINEMATIC )
+      return;
 
    if ( sleeping )
    {

@@ -54,6 +54,23 @@ physx::PxDefaultAllocator Px3World::smMemoryAlloc;
 F32 Px3World::smPhysicsStepTime = 1.0f/(F32)TickMs;
 U32 Px3World::smPhysicsMaxIterations = 4;
 
+//filter shader with support for CCD pairs
+static physx::PxFilterFlags sCcdFilterShader(
+        physx::PxFilterObjectAttributes attributes0,
+        physx::PxFilterData filterData0,
+        physx::PxFilterObjectAttributes attributes1,
+        physx::PxFilterData filterData1,
+        physx::PxPairFlags& pairFlags,
+        const void* constantBlock,
+        physx::PxU32 constantBlockSize)
+{
+        pairFlags = physx::PxPairFlag::eRESOLVE_CONTACTS;
+        pairFlags |= physx::PxPairFlag::eCCD_LINEAR;
+        return physx::PxFilterFlags();
+}
+
+
+
 Px3World::Px3World(): mScene( NULL ),
    mProcessList( NULL ),
    mIsSimulating( false ),
@@ -62,8 +79,8 @@ Px3World::Px3World(): mScene( NULL ),
    mIsEnabled( false ),
    mEditorTimeScale( 1.0f ),
    mAccumulator( 0 ),
-   mControllerManager(NULL),
-   mIsSceneLocked(false)
+   mControllerManager( NULL ),
+   mIsSceneLocked( false )
 {
 }
 
@@ -227,7 +244,8 @@ bool Px3World::initWorld( bool isServer, ProcessList *processList )
  	
    sceneDesc.flags |= physx::PxSceneFlag::eENABLE_CCD;
    sceneDesc.flags |= physx::PxSceneFlag::eENABLE_ACTIVETRANSFORMS;
-   sceneDesc.filterShader  = physx::PxDefaultSimulationFilterShader;
+   //sceneDesc.filterShader  = physx::PxDefaultSimulationFilterShader;
+   sceneDesc.filterShader  = sCcdFilterShader;
 
 	mScene = gPhysics3SDK->createScene(sceneDesc);
 
@@ -308,17 +326,18 @@ void Px3World::getPhysicsResults()
   // Con::printf( "%s PhysXWorld::getPhysicsResults!", this == smClientWorld ? "Client" : "Server" );
 }
 
-void Px3World::releaseWriteLocks()
+void Px3World::lockScenes()
 {
 	Px3World *world = dynamic_cast<Px3World*>( PHYSICSMGR->getWorld( "server" ) );
 
 	if ( world )
-		world->releaseWriteLock();
+		world->lockScene();
 
 	world = dynamic_cast<Px3World*>( PHYSICSMGR->getWorld( "client" ) );
 
 	if ( world )
-		world->releaseWriteLock();
+		world->lockScene();
+		//world->releaseWriteLock();
 }
 
 void Px3World::releaseWriteLock()
@@ -336,59 +355,46 @@ void Px3World::releaseWriteLock()
 	//AssertFatal( mScene->isWritable(), "PhysX3World::releaseWriteLock() - We should have been writable now!" );
 }
 
-void Px3World::lockScenes()
-{
-   Px3World *world = dynamic_cast<Px3World*>(PHYSICSMGR->getWorld("server"));
-
-   if (world)
-      world->lockScene();
-
-   world = dynamic_cast<Px3World*>(PHYSICSMGR->getWorld("client"));
-
-   if (world)
-      world->lockScene();
-}
-
 void Px3World::unlockScenes()
 {
-   Px3World *world = dynamic_cast<Px3World*>(PHYSICSMGR->getWorld("server"));
+	Px3World *world = dynamic_cast<Px3World*>( PHYSICSMGR->getWorld( "server" ) );
 
-   if (world)
-      world->unlockScene();
+	if ( world )
+		world->unlockScene();
 
-   world = dynamic_cast<Px3World*>(PHYSICSMGR->getWorld("client"));
+	world = dynamic_cast<Px3World*>( PHYSICSMGR->getWorld( "client" ) );
 
-   if (world)
-      world->unlockScene();
+	if ( world )
+		world->unlockScene();
 }
 
 void Px3World::lockScene()
 {
-   if (!mScene)
-      return;
+	if ( !mScene ) 
+		return;
 
-   if (mIsSceneLocked)
+   if(mIsSceneLocked)
    {
       Con::printf("Px3World: Attempting to lock a scene that is already locked.");
       return;
    }
 
-   mScene->lockWrite();
+	mScene->lockWrite();
    mIsSceneLocked = true;
 }
 
 void Px3World::unlockScene()
 {
-   if (!mScene)
-      return;
+	if ( !mScene ) 
+		return;
 
-   if (!mIsSceneLocked)
+   if(!mIsSceneLocked)
    {
       Con::printf("Px3World: Attempting to unlock a scene that is not locked.");
       return;
    }
 
-   mScene->unlockWrite();
+	mScene->unlockWrite();
    mIsSceneLocked = false;
 }
 
@@ -529,9 +535,10 @@ physx::PxController* Px3World::createController( physx::PxControllerDesc &desc )
 		return NULL;
 
 	// We need the writelock!
-	releaseWriteLock();
+	lockScene();
 	physx::PxController* pController = mControllerManager->createController(desc);
 	AssertFatal( pController, "Px3World::createController - Got a null!" );
+   unlockScene();
 	return pController;
 }
 
